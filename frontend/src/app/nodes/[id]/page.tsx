@@ -55,7 +55,7 @@ export default async function NodeDetailPage({ params }: Props) {
   try {
     node = await getNode(id);
   } catch (err) {
-    if (err instanceof ApiError && err.status === 404) {
+    if (err instanceof ApiError && (err.status === 404 || err.status === 422)) {
       notFound();
     }
     throw err;
