@@ -1,12 +1,14 @@
 import secrets
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
 from sqlalchemy.orm import Session
 
 from app.deps import Vault
-from app.models import Node
+from app.models import Check, Node
 from app.schemas import NodeUpdate
+from app.services.agent import CheckResult
 from app.services.indexer import sync_vault
 from app.services.locks import path_lock
 from app.services.vault_io import (
@@ -100,3 +102,27 @@ def update_node(db: Session, vault: Vault, node: Node, payload: NodeUpdate) -> N
     if updated is None:
         raise RuntimeError(f"node {node.id} missing from index immediately after sync")
     return updated
+
+
+def write_check_note(db: Session, vault: Vault, node: Node, result: CheckResult) -> Check:
+    check_id = _new_id()
+    slug = f"{slugify(node.title)}-{int(time.time())}"
+    path = allocate_path(vault.root, slug, subdir="checks")
+
+    frontmatter: dict[str, object] = {
+        "id": check_id,
+        "type": "check",
+        "node_id": node.id,
+        "verdict": result.verdict,
+        "checked": _iso_now(),
+        "sources": [s.model_dump() for s in result.sources],
+    }
+    body = f"Check of [[{node.title}]] - verdict: {result.verdict}\n\n{result.reasoning}\n"
+
+    atomic_write(path, serialize_note(frontmatter, body))
+    sync_vault(db, vault.root)
+
+    check = db.get(Check, check_id)
+    if check is None:
+        raise RuntimeError(f"check {check_id} missing from index immediately after sync")
+    return check

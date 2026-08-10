@@ -9,6 +9,7 @@ from app import schemas
 from app.deps import Vault, get_vault, synced_db
 from app.models import Check, Node, NodeLink
 from app.services import notes
+from app.services.agent import AgentCheckError, run_check
 from app.services.indexer import sync_vault
 
 router = APIRouter(prefix="/api/nodes", tags=["nodes"])
@@ -173,3 +174,26 @@ def update_node(
         raise HTTPException(503, f"failed to write vault file: {exc}") from exc
 
     return _build_detail(db, updated)
+
+
+@router.post("/{node_id}/checks", response_model=schemas.CheckRead, status_code=201)
+def run_node_check(
+    node_id: NodeId,
+    db: Session = Depends(synced_db),
+    vault: Vault = Depends(get_vault),
+) -> schemas.CheckRead:
+    node = db.get(Node, node_id)
+    if node is None or node.kind != "note":
+        raise HTTPException(404, "Node not found")
+
+    try:
+        result = run_check(claim=f"{node.title}\n\n{node.body}", context=node.ticker or "")
+    except AgentCheckError as exc:
+        raise HTTPException(502, f"Check failed: {exc}") from exc
+
+    try:
+        check = notes.write_check_note(db, vault, node, result)
+    except OSError as exc:
+        raise HTTPException(503, f"failed to write check file: {exc}") from exc
+
+    return schemas.CheckRead.model_validate(check)

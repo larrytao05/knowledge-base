@@ -15,25 +15,25 @@ class AgentCheckError(Exception):
 
 
 @dataclass
-class ThesisCheckResult:
+class CheckResult:
     verdict: Verdict
     reasoning: str
     sources: list[Source]
 
 
 SYSTEM_PROMPT = (
-    "You are a financial research analyst helping a retail investor keep an "
-    "existing investment thesis honest. You'll be given a stock ticker, the "
-    "thesis text they wrote, and recent web search results about the company. "
-    "Your ONLY job is to check the given thesis against the evidence and output "
-    "a verdict. Do NOT write your own investment thesis, report, or essay. Do "
-    "NOT use markdown headers, bullet points, or bold text anywhere.\n\n"
+    "You are a fact-checking research assistant helping someone keep their "
+    "notes honest. You'll be given a claim someone wrote down, optional "
+    "context, and recent web search results. Your ONLY job is to check the "
+    "claim against the evidence and output a verdict. Do NOT write your own "
+    "essay or notes on the topic. Do NOT use markdown headers, bullet points, "
+    "or bold text anywhere.\n\n"
     "Your entire reply must be exactly one JSON object and nothing else - no "
     "preamble, no explanation before or after it. It must match this shape:\n"
     '{"verdict": "on_track" | "diverging" | "unclear", "reasoning": "2-4 plain '
     'text paragraphs grounded in the search results", "sources": [{"title": '
     '"...", "url": "..."}]}\n\n'
-    "verdict meanings: on_track = evidence supports the thesis. diverging = "
+    "verdict meanings: on_track = evidence supports the claim. diverging = "
     "evidence contradicts or undermines it. unclear = insufficient or mixed "
     "evidence.\n\n"
     "Reminder: reply with the JSON object only."
@@ -42,7 +42,7 @@ SYSTEM_PROMPT = (
 VALID_VERDICTS = {"on_track", "diverging", "unclear"}
 
 REPORT_JSON_SCHEMA: dict[str, Any] = {
-    "name": "thesis_report",
+    "name": "check_report",
     "strict": True,
     "schema": {
         "type": "object",
@@ -101,9 +101,11 @@ def _request(client: OpenAI, messages: list[dict[str, str]], *, strict: bool) ->
     )
 
 
-def run_thesis_check(*, ticker: str, thesis_text: str) -> ThesisCheckResult:
+def run_check(*, claim: str, context: str = "") -> CheckResult:
     client = OpenAI(base_url=OPENROUTER_BASE_URL, api_key=settings.openrouter_api_key)
-    user_content = f"Ticker: {ticker}\n\nThesis:\n{thesis_text}"
+    user_content = f"Claim:\n{claim}"
+    if context:
+        user_content += f"\n\nContext: {context}"
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": user_content},
@@ -123,7 +125,7 @@ def run_thesis_check(*, ticker: str, thesis_text: str) -> ThesisCheckResult:
     return _coerce_result(content)
 
 
-def _coerce_result(content: str) -> ThesisCheckResult:
+def _coerce_result(content: str) -> CheckResult:
     """Build a result from the model's response, degrading gracefully instead
     of failing outright when the output doesn't match the expected shape -
     the raw content is still useful to the user even as an "unclear" verdict."""
@@ -144,4 +146,4 @@ def _coerce_result(content: str) -> ThesisCheckResult:
             if isinstance(entry, dict) and isinstance(entry.get("url"), str):
                 sources.append(Source(title=entry.get("title"), url=entry["url"]))
 
-    return ThesisCheckResult(verdict=cast(Verdict, verdict), reasoning=reasoning, sources=sources)
+    return CheckResult(verdict=cast(Verdict, verdict), reasoning=reasoning, sources=sources)
