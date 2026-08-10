@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Thesis Tracker",
-  description: "Write an investment thesis. An agent checks it against the news.",
+  title: "Knowledge Base",
+  description: "A personal knowledge base with wikilinks, backlinks, and AI fact-checking.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -26,12 +26,15 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <header className="border-b border-border-subtle">
-          <div className="mx-auto max-w-2xl px-4 py-4">
+          <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-4">
             <Link
               href="/"
               className="font-mono text-sm font-semibold tracking-wider text-foreground hover:text-accent"
             >
-              THESIS TRACKER
+              KNOWLEDGE BASE
+            </Link>
+            <Link href="/graph" className="text-sm text-muted hover:text-accent">
+              Graph
             </Link>
           </div>
         </header>
