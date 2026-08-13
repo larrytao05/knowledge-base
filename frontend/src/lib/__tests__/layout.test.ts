@@ -16,7 +16,7 @@ describe("computeGraphLayout", () => {
 
   it("places a single node at a finite position", () => {
     const data: GraphData = {
-      nodes: [{ id: "a", title: "A", ticker: null, verdict: null, degree: 0 }],
+      nodes: [{ id: "a", title: "A", verdict: null, degree: 0 }],
       edges: [],
       unresolved: [],
     };
@@ -29,9 +29,9 @@ describe("computeGraphLayout", () => {
   it("produces finite positions for every node in a small multi-node graph", () => {
     const data: GraphData = {
       nodes: [
-        { id: "a", title: "A", ticker: null, verdict: "on_track", degree: 2 },
-        { id: "b", title: "B", ticker: "BB", verdict: "diverging", degree: 1 },
-        { id: "c", title: "C", ticker: null, verdict: "unclear", degree: 1 },
+        { id: "a", title: "A", verdict: "on_track", degree: 2 },
+        { id: "b", title: "B", verdict: "diverging", degree: 1 },
+        { id: "c", title: "C", verdict: "unclear", degree: 1 },
       ],
       edges: [
         { source: "a", target: "b" },
@@ -50,8 +50,8 @@ describe("computeGraphLayout", () => {
   it("returns edges that reference ids present in the output nodes", () => {
     const data: GraphData = {
       nodes: [
-        { id: "a", title: "A", ticker: null, verdict: null, degree: 1 },
-        { id: "b", title: "B", ticker: null, verdict: null, degree: 1 },
+        { id: "a", title: "A", verdict: null, degree: 1 },
+        { id: "b", title: "B", verdict: null, degree: 1 },
       ],
       edges: [{ source: "a", target: "b" }],
       unresolved: [],
