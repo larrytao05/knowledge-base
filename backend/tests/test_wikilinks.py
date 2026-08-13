@@ -1,4 +1,11 @@
-from app.services.wikilinks import Link, extract_links, normalize_title, strip_code
+from app.services.wikilinks import (
+    Link,
+    extract_links,
+    is_linkable_title,
+    normalize_title,
+    rewrite_links,
+    strip_code,
+)
 
 
 class TestStripCode:
@@ -83,6 +90,68 @@ class TestExtractLinks:
 
     def test_malformed_unclosed_link(self) -> None:
         assert extract_links("[[Foo") == []
+
+
+class TestRewriteLinks:
+    def test_plain_link_retargeted(self) -> None:
+        assert rewrite_links("See [[Old]] here", "old", "New") == "See [[New]] here"
+
+    def test_alias_preserved(self) -> None:
+        assert rewrite_links("[[Old|the alias]]", "old", "New") == "[[New|the alias]]"
+
+    def test_anchor_preserved(self) -> None:
+        assert rewrite_links("[[Old#Some Heading]]", "old", "New") == "[[New#Some Heading]]"
+
+    def test_anchor_and_alias_preserved(self) -> None:
+        assert rewrite_links("[[Old#H|a]]", "old", "New") == "[[New#H|a]]"
+
+    def test_matches_via_normalized_title(self) -> None:
+        assert rewrite_links("[[  old   title.md ]]", "old title", "New") == "[[New]]"
+
+    def test_other_links_untouched(self) -> None:
+        text = "[[Old]] and [[Unrelated]]"
+        assert rewrite_links(text, "old", "New") == "[[New]] and [[Unrelated]]"
+
+    def test_fenced_code_not_rewritten(self) -> None:
+        text = "[[Old]]\n```\n[[Old]]\n```\n"
+        assert rewrite_links(text, "old", "New") == "[[New]]\n```\n[[Old]]\n```\n"
+
+    def test_inline_code_not_rewritten(self) -> None:
+        text = "write `[[Old]]` to link [[Old]]"
+        assert rewrite_links(text, "old", "New") == "write `[[Old]]` to link [[New]]"
+
+    def test_no_match_returns_original(self) -> None:
+        text = "nothing to see [[Other]]"
+        assert rewrite_links(text, "old", "New") is text
+
+    def test_repeated_links_all_rewritten(self) -> None:
+        assert rewrite_links("[[Old]] [[Old]]", "old", "New") == "[[New]] [[New]]"
+
+    def test_inline_code_inside_an_alias_survives(self) -> None:
+        text = "[[Old Title|the `code` alias]]"
+        assert rewrite_links(text, "old title", "New") == "[[New|the `code` alias]]"
+
+    def test_inline_code_inside_an_anchor_survives(self) -> None:
+        text = "[[Old#the `code` heading]]"
+        assert rewrite_links(text, "old", "New") == "[[New#the `code` heading]]"
+
+    def test_unlinkable_new_title_leaves_the_text_alone(self) -> None:
+        text = "see [[Old]] here"
+        for unsafe in ("C# notes", "foo]] bar", "a|b", "x[y", "  "):
+            assert rewrite_links(text, "old", unsafe) is text
+
+
+class TestIsLinkableTitle:
+    def test_ordinary_titles_are_linkable(self) -> None:
+        assert is_linkable_title("Nvidia AI capex")
+        assert is_linkable_title("Café ÜBER 2024")
+
+    def test_wikilink_syntax_characters_are_rejected(self) -> None:
+        for unsafe in ("C# notes", "foo]] bar", "x[y", "a|b", "two\nlines", "crlf\r"):
+            assert not is_linkable_title(unsafe)
+
+    def test_blank_is_rejected(self) -> None:
+        assert not is_linkable_title("   ")
 
 
 class TestNormalizeTitle:

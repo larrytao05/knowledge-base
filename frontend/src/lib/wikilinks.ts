@@ -10,11 +10,24 @@ export interface Link {
 // [\s\S] (dotAll's lazy-any-char equivalent) are used instead.
 const FENCED_CODE_RE = /^```[^\n]*\n[\s\S]*?^```[ \t]*$/gm;
 const INLINE_CODE_RE = /`[^`\n]*`/g;
-const WIKILINK_RE = /\[\[([^[\]|#\n]+?)(?:#([^[\]|\n]+?))?(?:\|([^[\]\n]+?))?\]\]/g;
+export const WIKILINK_RE = /\[\[([^[\]|#\n]+?)(?:#([^[\]|\n]+?))?(?:\|([^[\]\n]+?))?\]\]/g;
+// The same pattern unanchored to a lastIndex, for re-reading one match's groups
+// out of the original text. The "d" flag would give the offsets directly but
+// needs an ES2022 target; this file stays within ES2017 like its neighbours.
+const ONE_WIKILINK_RE = /\[\[([^[\]|#\n]+?)(?:#([^[\]|\n]+?))?(?:\|([^[\]\n]+?))?\]\]/;
 const WHITESPACE_RUN_RE = /\s+/g;
+const NON_NEWLINE_RE = /[^\n]/g;
+// The remainder of a link the caret sits inside, up to and including its closer.
+const LINK_TAIL_RE = /^[^[\]\n]*\]\]/;
+// Characters the wikilink grammar gives its own meaning, so a title containing
+// one can never be addressed by a `[[link]]` (Obsidian bans the same set).
+const UNLINKABLE_TITLE_RE = /[[\]#|\r\n]/;
 
+// Replaces per UTF-16 code unit, not per code point: string offsets are code
+// units, so spreading the match would shorten it for non-BMP characters (emoji,
+// rare CJK) and shift every offset after a code span that contains one.
 function blank(match: string): string {
-  return [...match].map((c) => (c === "\n" ? "\n" : " ")).join("");
+  return match.replace(NON_NEWLINE_RE, " ");
 }
 
 export function stripCode(text: string): string {
@@ -22,14 +35,27 @@ export function stripCode(text: string): string {
   return withoutFences.replace(INLINE_CODE_RE, blank);
 }
 
+/** Read a group of a match made against the stripped text back out of the
+ * original: blanking preserves offsets and lengths, so the same span of the raw
+ * text re-parses, but with any inline code inside the group left intact. */
+export function groupFrom(text: string, match: RegExpExecArray, group: number): string | null {
+  const start = match.index ?? 0;
+  const span = text.slice(start, start + match[0].length);
+  const raw = ONE_WIKILINK_RE.exec(span);
+  // Inline code holding "]]" closes the raw link earlier than the blanked one,
+  // so fall back to the stripped group rather than report a shorter target.
+  if (!raw || raw[0].length !== span.length) return match[group] ?? null;
+  return raw[group] ?? null;
+}
+
 export function extractLinks(body: string): Link[] {
   const stripped = stripCode(body);
   const links: Link[] = [];
   for (const match of stripped.matchAll(WIKILINK_RE)) {
-    const raw = (match[1] ?? "").trim();
+    const raw = (groupFrom(body, match, 1) ?? "").trim();
     if (!raw) continue;
-    const anchorGroup = match[2];
-    const aliasGroup = match[3];
+    const anchorGroup = groupFrom(body, match, 2);
+    const aliasGroup = groupFrom(body, match, 3);
     links.push({
       raw,
       anchor: anchorGroup ? anchorGroup.trim() : null,
@@ -38,6 +64,48 @@ export function extractLinks(body: string): Link[] {
     });
   }
   return links;
+}
+
+export function isLinkableTitle(title: string): boolean {
+  return title.trim().length > 0 && !UNLINKABLE_TITLE_RE.test(title);
+}
+
+export interface WikilinkQuery {
+  start: number;
+  query: string;
+}
+
+/** The `[[` autocomplete query the caret sits in, or null if it doesn't sit in one. */
+export function activeWikilinkQuery(text: string, caret: number): WikilinkQuery | null {
+  const before = text.slice(0, caret);
+  const start = before.lastIndexOf("[[");
+  if (start < 0) return null;
+
+  const query = before.slice(start + 2);
+  if (query.includes("[") || query.includes("]") || query.includes("\n")) return null;
+  // Blanking preserves offsets, so an opener still present in the stripped text
+  // is one that lives outside any code block/span.
+  if (stripCode(text).slice(start, start + 2) !== "[[") return null;
+
+  return { start, query };
+}
+
+export function insertWikilink(
+  text: string,
+  query: WikilinkQuery,
+  title: string,
+): { text: string; caret: number } {
+  const rest = text.slice(query.start + 2 + query.query.length);
+  // The caret can sit anywhere inside an existing link, so replace through that
+  // link's closer - consuming only a closer sitting right at the caret would
+  // leave the rest of the old target stranded in the prose.
+  const tail = LINK_TAIL_RE.exec(rest);
+  const remainder = tail ? rest.slice(tail[0].length) : rest;
+  const link = `[[${title}]]`;
+  return {
+    text: text.slice(0, query.start) + link + remainder,
+    caret: query.start + link.length,
+  };
 }
 
 export function normalizeTitle(s: string): string {
