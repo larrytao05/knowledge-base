@@ -11,7 +11,6 @@ import type { GraphData, Verdict } from "@/types";
 export interface LayoutNode {
   id: string;
   title: string;
-  ticker: string | null;
   verdict: Verdict | null;
   degree: number;
   x: number;
@@ -33,7 +32,6 @@ export interface GraphLayout {
 interface SimNode extends SimulationNodeDatum {
   id: string;
   title: string;
-  ticker: string | null;
   verdict: Verdict | null;
   degree: number;
 }
@@ -81,7 +79,6 @@ export function computeGraphLayout(data: GraphData, width: number, height: numbe
   const nodes: LayoutNode[] = simNodes.map((node) => ({
     id: node.id,
     title: node.title,
-    ticker: node.ticker,
     verdict: node.verdict,
     degree: node.degree,
     x: finite(node.x, width / 2),

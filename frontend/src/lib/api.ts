@@ -54,7 +54,6 @@ export function getNode(id: string): Promise<NodeDetail> {
 export function createNode(input: {
   title: string;
   body?: string;
-  ticker?: string | null;
   tags?: string[];
 }): Promise<NodeDetail> {
   return request("/api/nodes", { method: "POST", body: JSON.stringify(input) });
@@ -66,7 +65,6 @@ export function updateNode(
     content_hash: string;
     title?: string;
     body?: string;
-    ticker?: string | null;
     tags?: string[];
   },
 ): Promise<NodeDetail> {
