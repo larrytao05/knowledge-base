@@ -15,7 +15,7 @@ settings.vault_path.mkdir(parents=True, exist_ok=True)
 (settings.vault_path / "checks").mkdir(parents=True, exist_ok=True)
 logger.info("Vault path: %s", settings.vault_path)
 
-app = FastAPI(title="Thesis Tracker API")
+app = FastAPI(title="Knowledge Base API")
 
 app.add_middleware(
     CORSMiddleware,

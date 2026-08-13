@@ -1,6 +1,6 @@
 # Knowledge Base
 
-A personal knowledge base: write markdown notes ("nodes"), link them with `[[wikilinks]]`, tag them, and browse an in-app graph of how they connect. Any node can carry a stock ticker, in which case an LLM agent (via [OpenRouter](https://openrouter.ai)) can fact-check it against the web, returning a verdict (on track / diverging / unclear) with reasoning and sources.
+A personal knowledge base: write markdown notes ("nodes"), link them with `[[wikilinks]]`, tag them, and browse an in-app graph of how they connect. Any node can be fact-checked against the web by an LLM agent (via [OpenRouter](https://openrouter.ai)), returning a verdict (on track / diverging / unclear) with reasoning and sources.
 
 Markdown files under `vault/` are the source of truth — SQLite is just a rebuildable index built by scanning that folder. Edit a note directly on disk (in an editor, or Obsidian by opening `vault/` as a vault) and the app picks it up.
 
