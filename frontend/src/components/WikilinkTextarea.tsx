@@ -149,7 +149,7 @@ export function WikilinkTextarea({
         disabled={disabled}
         className={`w-full ${className}`}
       />
-      {open && (
+      {open && !disabled && (
         <ul className="absolute left-0 top-full z-10 mt-1 max-h-56 w-full overflow-auto rounded border border-border-default bg-background py-1">
           {options.map((option, i) => (
             <li key={option.id}>

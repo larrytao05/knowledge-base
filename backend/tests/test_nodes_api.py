@@ -219,6 +219,48 @@ def test_rename_rewrites_links_in_a_note_with_malformed_frontmatter(
     assert "title: [unclosed" in text
 
 
+def test_rename_away_from_a_shared_title_leaves_self_links_alone(
+    client: TestClient, vault_root: Path
+) -> None:
+    kept = _create(client, title="Meeting Notes")
+    renamed = _create(client, title="Meeting Notes", body="See also [[Meeting Notes]].")
+    assert client.get(f"/api/nodes/{renamed['id']}").json()["links_out"][0]["node_id"] == kept["id"]
+
+    response = client.patch(
+        f"/api/nodes/{renamed['id']}",
+        json={"content_hash": renamed["content_hash"], "title": "Weekly Sync"},
+    )
+
+    # The note's own link meant the other note, so rewriting it here would turn
+    # a cross-reference into a self-reference.
+    assert response.status_code == 200
+    assert "See also [[Meeting Notes]]." in (vault_root / renamed["path"]).read_text()
+    detail = client.get(f"/api/nodes/{renamed['id']}").json()
+    assert detail["links_out"][0]["node_id"] == kept["id"]
+
+
+def test_check_notes_do_not_count_towards_the_rename_report(
+    client: TestClient, vault_root: Path
+) -> None:
+    kept = _create(client, title="Meeting Notes")
+    renamed = _create(client, title="Meeting Notes")
+    (vault_root / "checks").mkdir(exist_ok=True)
+    (vault_root / "checks" / "c.md").write_text(
+        "---\nid: cccccccccccc\ntype: check\n"
+        f"node_id: {kept['id']}\nverdict: on-track\n---\n\nCheck of [[Meeting Notes]].\n",
+        encoding="utf-8",
+    )
+    time.sleep(0.35)
+
+    response = client.patch(
+        f"/api/nodes/{renamed['id']}",
+        json={"content_hash": renamed["content_hash"], "title": "Weekly Sync"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["links_left_at_old_title"] == 0
+
+
 def test_rename_rewrites_a_target_holding_inline_code(
     client: TestClient, vault_root: Path
 ) -> None:

@@ -11,10 +11,6 @@ export interface Link {
 const FENCED_CODE_RE = /^```[^\n]*\n[\s\S]*?^```[ \t]*$/gm;
 const INLINE_CODE_RE = /`[^`\n]*`/g;
 export const WIKILINK_RE = /\[\[([^[\]|#\n]+?)(?:#([^[\]|\n]+?))?(?:\|([^[\]\n]+?))?\]\]/g;
-// The same pattern unanchored to a lastIndex, for re-reading one match's groups
-// out of the original text. The "d" flag would give the offsets directly but
-// needs an ES2022 target; this file stays within ES2017 like its neighbours.
-const ONE_WIKILINK_RE = /\[\[([^[\]|#\n]+?)(?:#([^[\]|\n]+?))?(?:\|([^[\]\n]+?))?\]\]/;
 const WHITESPACE_RUN_RE = /\s+/g;
 const NON_NEWLINE_RE = /[^\n]/g;
 // The remainder of a link the caret sits inside, up to and including its closer.
@@ -36,16 +32,27 @@ export function stripCode(text: string): string {
 }
 
 /** Read a group of a match made against the stripped text back out of the
- * original: blanking preserves offsets and lengths, so the same span of the raw
- * text re-parses, but with any inline code inside the group left intact. */
+ * original. The groups are located by splitting the stripped match on the "#"
+ * and "|" its own character classes exclude, then slicing the raw text at those
+ * offsets - blanking preserves them. Re-parsing the raw span instead would let
+ * a "#", "|" or "]]" hidden inside inline code split it differently from the
+ * blanked copy the backend and the indexer agree on. The "d" flag would give
+ * the offsets directly but needs an ES2022 target; this file stays on ES2017. */
 export function groupFrom(text: string, match: RegExpExecArray, group: number): string | null {
-  const start = match.index ?? 0;
-  const span = text.slice(start, start + match[0].length);
-  const raw = ONE_WIKILINK_RE.exec(span);
-  // Inline code holding "]]" closes the raw link earlier than the blanked one,
-  // so fall back to the stripped group rather than report a shorter target.
-  if (!raw || raw[0].length !== span.length) return match[group] ?? null;
-  return raw[group] ?? null;
+  const start = (match.index ?? 0) + 2;
+  const inner = match[0].slice(2, -2);
+
+  const hash = inner.indexOf("#");
+  const pipe = inner.indexOf("|");
+  const aliasAt = pipe < 0 ? inner.length : pipe;
+  const anchorAt = hash < 0 || hash > aliasAt ? aliasAt : hash;
+
+  const span = (from: number, to: number): string | null =>
+    from < to ? text.slice(start + from, start + to) : null;
+
+  if (group === 1) return span(0, anchorAt);
+  if (group === 2) return anchorAt < aliasAt ? span(anchorAt + 1, aliasAt) : null;
+  return pipe < 0 ? null : span(aliasAt + 1, inner.length);
 }
 
 export function extractLinks(body: string): Link[] {

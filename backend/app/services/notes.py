@@ -86,10 +86,12 @@ def _title_taken(db: Session, new_norm: str, skip_id: str) -> bool:
 
 
 def _inbound_link_sources(old_norm: str, *, skip_id: str) -> Select[tuple[Node]]:
+    # Check notes link to the node they report on, but they aren't notes the user
+    # wrote or can see - counting them would overstate what a rename touched.
     return (
         select(Node)
         .join(NodeLink, NodeLink.source_id == Node.id)
-        .where(NodeLink.target_norm == old_norm, Node.id != skip_id)
+        .where(NodeLink.target_norm == old_norm, Node.kind == "note", Node.id != skip_id)
         .distinct()
     )
 
@@ -188,7 +190,12 @@ def update_node(
             raise UnlinkableTitleError(new_title)
         if renamed and _title_taken(db, new_norm, node.id):
             raise TitleConflictError(new_title)
-        if renamed:
+        # Another note keeping the old title makes every `[[old title]]` mean
+        # that one, including the ones in this note's own body - so the same
+        # guard the inbound rewrite uses has to hold here too, or a reference to
+        # the other note would quietly become a self-reference.
+        shared_old_title = renamed and _title_taken(db, old_norm, node.id)
+        if renamed and not shared_old_title:
             # Self-links go through this write rather than the loop below, which
             # has to skip this note to avoid clobbering what is written here.
             body = rewrite_links(body, old_norm, new_title)
@@ -198,12 +205,10 @@ def update_node(
 
     skipped = 0
     left_alone = 0
-    if renamed and _title_taken(db, old_norm, node.id):
-        # Another note still holds the old title, so an inbound `[[old title]]`
-        # may well have meant that one - retargeting it here would silently point
-        # it somewhere it never referred to. Leave them all alone: the old title
-        # is now unambiguous, so they resolve to the note that kept it. Nothing
-        # failed here, so this is counted apart from the rewrites that did.
+    if shared_old_title:
+        # Inbound links are left alone for the same reason: the old title is now
+        # unambiguous, so they resolve to the note that kept it. Nothing failed
+        # here, so this is counted apart from the rewrites that did.
         left_alone = len(list(db.scalars(_inbound_link_sources(old_norm, skip_id=node.id))))
     elif renamed:
         skipped = _rewrite_inbound_links(

@@ -63,6 +63,21 @@ describe("NodeBody", () => {
     expect(screen.getByRole("link", { name: "a `b` c" })).toBeInTheDocument();
   });
 
+  // A "#" or "|" hidden in inline code must not split the target the way it
+  // would in raw text - the backend matches on the blanked copy, so the two
+  // would disagree about which note the link means.
+  it.each(["#", "|"])("keeps a %s hidden in inline code inside the target", (char) => {
+    const target = link({
+      target_raw: `Tar\`${char}\`get`,
+      node_id: "bbbbbbbbbbbb",
+      title: `Tar\`${char}\`get`,
+    });
+    render(<NodeBody body={`see [[Tar\`${char}\`get]]`} linksOut={[target]} />);
+
+    expect(screen.getByRole("link")).toBeInTheDocument();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
   it("keeps inline code inside an unresolved target", () => {
     render(<NodeBody body="see [[Mis`s`ing]]" linksOut={[link({ target_raw: "Mis`s`ing" })]} />);
 
