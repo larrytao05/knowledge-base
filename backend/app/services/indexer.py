@@ -56,7 +56,7 @@ def _coerce_datetime(value: Any, mtime_ns: int) -> datetime:
     return datetime.fromtimestamp(mtime_ns / 1e9, tz=UTC)
 
 
-def _title_from_frontmatter(parsed: ParsedNote) -> str | None:
+def title_from_frontmatter(parsed: ParsedNote) -> str | None:
     if parsed.error is not None:
         return None
     title = parsed.frontmatter.get("title")
@@ -112,7 +112,7 @@ def _index_note_file(
     )
     mtime_ns, size = file_signature(path)
 
-    title = _title_from_frontmatter(parsed) or path.stem
+    title = title_from_frontmatter(parsed) or path.stem
     tags = _coerce_tags(parsed.frontmatter.get("tags")) if parsed.error is None else []
     created_raw = parsed.frontmatter.get("created") if parsed.error is None else None
 

@@ -115,6 +115,285 @@ def test_get_unknown_node_404(client: TestClient) -> None:
     assert response.status_code == 404
 
 
+def test_rename_rewrites_inbound_links_in_other_notes(
+    client: TestClient, vault_root: Path
+) -> None:
+    target = _create(client, title="Old Title")
+    source = _create(
+        client,
+        title="Source Note",
+        body=(
+            "See [[Old Title]], [[Old Title#Some Heading]] and [[Old Title|the alias]].\n\n"
+            "```\n[[Old Title]]\n```\n\nInline `[[Old Title]]` stays too.\n"
+        ),
+    )
+
+    response = client.patch(
+        f"/api/nodes/{target['id']}",
+        json={"content_hash": target["content_hash"], "title": "New Title"},
+    )
+    assert response.status_code == 200
+
+    text = (vault_root / source["path"]).read_text()
+    assert "See [[New Title]], [[New Title#Some Heading]] and [[New Title|the alias]]." in text
+    assert "```\n[[Old Title]]\n```" in text
+    assert "`[[Old Title]]`" in text
+
+    source_detail = client.get(f"/api/nodes/{source['id']}").json()
+    assert [link["node_id"] for link in source_detail["links_out"]] == [target["id"]] * 3
+
+
+def test_rename_rewrites_self_links_in_the_renamed_note(
+    client: TestClient, vault_root: Path
+) -> None:
+    node = _create(client, title="Old Title", body="This note is [[Old Title]].")
+
+    response = client.patch(
+        f"/api/nodes/{node['id']}",
+        json={"content_hash": node["content_hash"], "title": "New Title"},
+    )
+
+    assert response.status_code == 200
+    assert "This note is [[New Title]]." in (vault_root / node["path"]).read_text()
+
+
+def test_rename_onto_an_existing_title_is_rejected(client: TestClient, vault_root: Path) -> None:
+    target = _create(client, title="Old Title")
+    _create(client, title="New Title")
+    source = _create(client, title="Source Note", body="See [[Old Title]].")
+
+    response = client.patch(
+        f"/api/nodes/{target['id']}",
+        json={"content_hash": target["content_hash"], "title": "New Title"},
+    )
+
+    # Rewriting the link text is not reversible, so the collision has to be
+    # refused rather than silently pointing this note's backlinks at the other.
+    assert response.status_code == 409
+    assert "See [[Old Title]]." in (vault_root / source["path"]).read_text()
+    assert client.get(f"/api/nodes/{target['id']}").json()["title"] == "Old Title"
+
+
+def test_rename_away_from_a_shared_title_leaves_inbound_links_alone(
+    client: TestClient, vault_root: Path
+) -> None:
+    kept = _create(client, title="Meeting Notes")
+    renamed = _create(client, title="Meeting Notes")
+    source = _create(client, title="Source Note", body="See [[Meeting Notes]].")
+    assert client.get(f"/api/nodes/{source['id']}").json()["links_out"][0]["node_id"] == kept["id"]
+
+    response = client.patch(
+        f"/api/nodes/{renamed['id']}",
+        json={"content_hash": renamed["content_hash"], "title": "Weekly Sync"},
+    )
+
+    # The link may well have meant the note that kept the title, so retargeting
+    # it at the renamed one would repoint it at a note it never referenced.
+    assert response.status_code == 200
+    assert response.json()["links_left_at_old_title"] == 1
+    assert response.json()["link_rewrite_skipped"] == 0
+    assert "See [[Meeting Notes]]." in (vault_root / source["path"]).read_text()
+    source_detail = client.get(f"/api/nodes/{source['id']}").json()
+    assert source_detail["links_out"][0]["node_id"] == kept["id"]
+
+
+def test_rename_rewrites_links_in_a_note_with_malformed_frontmatter(
+    client: TestClient, vault_root: Path
+) -> None:
+    target = _create(client, title="Old Title")
+    # No link rows exist for a note the indexer couldn't parse, so the index
+    # can't nominate it - its body still has to be retargeted.
+    broken = vault_root / "broken.md"
+    broken.write_text("---\ntitle: [unclosed\n---\n\nSee [[Old Title]].\n", encoding="utf-8")
+    time.sleep(0.35)
+
+    response = client.patch(
+        f"/api/nodes/{target['id']}",
+        json={"content_hash": target["content_hash"], "title": "New Title"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["link_rewrite_skipped"] == 0
+    text = broken.read_text()
+    assert "See [[New Title]]." in text
+    assert "title: [unclosed" in text
+
+
+def test_rename_away_from_a_shared_title_leaves_self_links_alone(
+    client: TestClient, vault_root: Path
+) -> None:
+    kept = _create(client, title="Meeting Notes")
+    renamed = _create(client, title="Meeting Notes", body="See also [[Meeting Notes]].")
+    assert client.get(f"/api/nodes/{renamed['id']}").json()["links_out"][0]["node_id"] == kept["id"]
+
+    response = client.patch(
+        f"/api/nodes/{renamed['id']}",
+        json={"content_hash": renamed["content_hash"], "title": "Weekly Sync"},
+    )
+
+    # The note's own link meant the other note, so rewriting it here would turn
+    # a cross-reference into a self-reference.
+    assert response.status_code == 200
+    assert "See also [[Meeting Notes]]." in (vault_root / renamed["path"]).read_text()
+    detail = client.get(f"/api/nodes/{renamed['id']}").json()
+    assert detail["links_out"][0]["node_id"] == kept["id"]
+
+
+def test_rename_retargets_a_check_notes_link(client: TestClient, vault_root: Path) -> None:
+    node = _create(client, title="Old Title")
+    (vault_root / "checks").mkdir(exist_ok=True)
+    check = vault_root / "checks" / "c.md"
+    check.write_text(
+        "---\nid: cccccccccccc\ntype: check\n"
+        f"node_id: {node['id']}\nverdict: on-track\n---\n\nCheck of [[Old Title]].\n",
+        encoding="utf-8",
+    )
+    time.sleep(0.35)
+
+    response = client.patch(
+        f"/api/nodes/{node['id']}",
+        json={"content_hash": node["content_hash"], "title": "New Title"},
+    )
+
+    # A check note is not reported on, but its link still has to follow.
+    assert response.status_code == 200
+    assert "Check of [[New Title]]." in check.read_text()
+
+
+def test_check_notes_do_not_count_towards_the_rename_report(
+    client: TestClient, vault_root: Path
+) -> None:
+    kept = _create(client, title="Meeting Notes")
+    renamed = _create(client, title="Meeting Notes")
+    (vault_root / "checks").mkdir(exist_ok=True)
+    (vault_root / "checks" / "c.md").write_text(
+        "---\nid: cccccccccccc\ntype: check\n"
+        f"node_id: {kept['id']}\nverdict: on-track\n---\n\nCheck of [[Meeting Notes]].\n",
+        encoding="utf-8",
+    )
+    time.sleep(0.35)
+
+    response = client.patch(
+        f"/api/nodes/{renamed['id']}",
+        json={"content_hash": renamed["content_hash"], "title": "Weekly Sync"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["links_left_at_old_title"] == 0
+
+
+def test_rename_rewrites_a_target_holding_inline_code(
+    client: TestClient, vault_root: Path
+) -> None:
+    target = _create(client, title="Using `git rebase`")
+    source = _create(client, title="Source Note", body="See [[Using `git rebase`]].")
+    before = client.get(f"/api/nodes/{source['id']}").json()
+    assert before["links_out"][0]["node_id"] == target["id"]
+
+    response = client.patch(
+        f"/api/nodes/{target['id']}",
+        json={"content_hash": target["content_hash"], "title": "Rebasing"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["link_rewrite_skipped"] == 0
+    assert "See [[Rebasing]]." in (vault_root / source["path"]).read_text()
+    source_detail = client.get(f"/api/nodes/{source['id']}").json()
+    assert source_detail["links_out"][0]["node_id"] == target["id"]
+
+
+def test_rename_keeps_inline_code_inside_an_alias(client: TestClient, vault_root: Path) -> None:
+    target = _create(client, title="Old Title")
+    source = _create(client, title="Source Note", body="See [[Old Title|the `code` alias]].")
+
+    client.patch(
+        f"/api/nodes/{target['id']}",
+        json={"content_hash": target["content_hash"], "title": "New Title"},
+    )
+
+    text = (vault_root / source["path"]).read_text()
+    assert "[[New Title|the `code` alias]]" in text
+
+
+def test_rename_to_an_unlinkable_title_is_rejected(client: TestClient, vault_root: Path) -> None:
+    target = _create(client, title="Old Title")
+    source = _create(client, title="Source Note", body="See [[Old Title]].")
+    before = (vault_root / source["path"]).read_text()
+
+    for unsafe in ("C# notes", "foo]] bar", "a|b", "   "):
+        response = client.patch(
+            f"/api/nodes/{target['id']}",
+            json={"content_hash": target["content_hash"], "title": unsafe},
+        )
+        assert response.status_code == 422
+
+    assert (vault_root / source["path"]).read_text() == before
+    assert client.get(f"/api/nodes/{target['id']}").json()["title"] == "Old Title"
+
+
+def test_create_with_an_unlinkable_title_is_rejected(client: TestClient) -> None:
+    response = client.post("/api/nodes", json={"title": "C# notes"})
+    assert response.status_code == 422
+
+
+def _write_unlinkable_title_note(vault_root: Path) -> str:
+    # Titles are free-form frontmatter and the vault is co-edited with Obsidian,
+    # so notes like this arrive through the indexer, not through the API.
+    node_id = "abcdef123456"
+    path = vault_root / "csharp.md"
+    path.write_text(f'---\nid: {node_id}\ntitle: "C# notes"\n---\n\nOld body.\n')
+    return node_id
+
+
+def test_body_edit_of_a_note_with_an_unlinkable_title_is_allowed(
+    client: TestClient, vault_root: Path
+) -> None:
+    node_id = _write_unlinkable_title_note(vault_root)
+    detail = client.get(f"/api/nodes/{node_id}").json()
+    assert detail["title"] == "C# notes"
+
+    response = client.patch(
+        f"/api/nodes/{node_id}",
+        json={
+            "content_hash": detail["content_hash"],
+            "title": detail["title"],
+            "body": "New body.",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "New body." in (vault_root / "csharp.md").read_text()
+    assert client.get(f"/api/nodes/{node_id}").json()["title"] == "C# notes"
+
+
+def test_rename_away_from_an_unlinkable_title_is_allowed(
+    client: TestClient, vault_root: Path
+) -> None:
+    node_id = _write_unlinkable_title_note(vault_root)
+    detail = client.get(f"/api/nodes/{node_id}").json()
+
+    response = client.patch(
+        f"/api/nodes/{node_id}",
+        json={"content_hash": detail["content_hash"], "title": "Csharp notes"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["title"] == "Csharp notes"
+
+
+def test_rename_leaves_unrelated_notes_alone(client: TestClient, vault_root: Path) -> None:
+    target = _create(client, title="Old Title")
+    other = _create(client, title="Other Note", body="Links to [[Something Else]].")
+    before = (vault_root / other["path"]).read_text()
+
+    client.patch(
+        f"/api/nodes/{target['id']}",
+        json={"content_hash": target["content_hash"], "title": "New Title"},
+    )
+
+    assert (vault_root / other["path"]).read_text() == before
+
+
 def test_links_out_and_backlinks_resolve_across_nodes(client: TestClient) -> None:
     target = _create(client, title="Target Note")
     source = _create(client, title="Source Note", body="See [[Target Note]].")
