@@ -85,15 +85,20 @@ def _title_taken(db: Session, new_norm: str, skip_id: str) -> bool:
     return db.scalars(stmt).first() is not None
 
 
-def _inbound_link_sources(old_norm: str, *, skip_id: str) -> Select[tuple[Node]]:
-    # Check notes link to the node they report on, but they aren't notes the user
-    # wrote or can see - counting them would overstate what a rename touched.
-    return (
+def _inbound_link_sources(
+    old_norm: str, *, skip_id: str, notes_only: bool = False
+) -> Select[tuple[Node]]:
+    """Everything holding a `[[old title]]`. Check notes link to the node they
+    report on and their links are retargeted like any other, but they aren't
+    notes the user wrote or can see, so reporting on them would overstate what a
+    rename touched - hence `notes_only` for the counting path."""
+    stmt = (
         select(Node)
         .join(NodeLink, NodeLink.source_id == Node.id)
-        .where(NodeLink.target_norm == old_norm, Node.kind == "note", Node.id != skip_id)
+        .where(NodeLink.target_norm == old_norm, Node.id != skip_id)
         .distinct()
     )
+    return stmt.where(Node.kind == "note") if notes_only else stmt
 
 
 def _malformed_note_sources(skip_id: str) -> Select[tuple[Node]]:
@@ -209,7 +214,9 @@ def update_node(
         # Inbound links are left alone for the same reason: the old title is now
         # unambiguous, so they resolve to the note that kept it. Nothing failed
         # here, so this is counted apart from the rewrites that did.
-        left_alone = len(list(db.scalars(_inbound_link_sources(old_norm, skip_id=node.id))))
+        left_alone = len(
+            list(db.scalars(_inbound_link_sources(old_norm, skip_id=node.id, notes_only=True)))
+        )
     elif renamed:
         skipped = _rewrite_inbound_links(
             db, vault, old_norm=old_norm, new_title=new_title, skip_id=node.id

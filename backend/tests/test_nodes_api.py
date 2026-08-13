@@ -239,6 +239,27 @@ def test_rename_away_from_a_shared_title_leaves_self_links_alone(
     assert detail["links_out"][0]["node_id"] == kept["id"]
 
 
+def test_rename_retargets_a_check_notes_link(client: TestClient, vault_root: Path) -> None:
+    node = _create(client, title="Old Title")
+    (vault_root / "checks").mkdir(exist_ok=True)
+    check = vault_root / "checks" / "c.md"
+    check.write_text(
+        "---\nid: cccccccccccc\ntype: check\n"
+        f"node_id: {node['id']}\nverdict: on-track\n---\n\nCheck of [[Old Title]].\n",
+        encoding="utf-8",
+    )
+    time.sleep(0.35)
+
+    response = client.patch(
+        f"/api/nodes/{node['id']}",
+        json={"content_hash": node["content_hash"], "title": "New Title"},
+    )
+
+    # A check note is not reported on, but its link still has to follow.
+    assert response.status_code == 200
+    assert "Check of [[New Title]]." in check.read_text()
+
+
 def test_check_notes_do_not_count_towards_the_rename_report(
     client: TestClient, vault_root: Path
 ) -> None:
