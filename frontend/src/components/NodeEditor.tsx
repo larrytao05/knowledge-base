@@ -26,7 +26,6 @@ function parseTags(text: string): string[] {
 export function NodeEditor({ node }: { node: NodeDetail }) {
   const router = useRouter();
   const [title, setTitle] = useState(node.title);
-  const [ticker, setTicker] = useState(node.ticker ?? "");
   const [tagsText, setTagsText] = useState(node.tags.join(", "));
   const [body, setBody] = useState(node.body);
   const [contentHash, setContentHash] = useState(node.content_hash);
@@ -53,7 +52,6 @@ export function NodeEditor({ node }: { node: NodeDetail }) {
         content_hash: hash,
         title,
         body,
-        ticker: ticker.trim() ? ticker.trim() : null,
         tags: parseTags(tagsText),
       });
       setContentHash(updated.content_hash);
@@ -78,7 +76,6 @@ export function NodeEditor({ node }: { node: NodeDetail }) {
     if (!conflict?.current) return;
     const current = conflict.current;
     setTitle(current.title);
-    setTicker(current.ticker ?? "");
     setTagsText(current.tags.join(", "));
     setBody(current.body);
     setContentHash(current.content_hash);
@@ -101,17 +98,6 @@ export function NodeEditor({ node }: { node: NodeDetail }) {
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           className={inputClass}
-        />
-      </div>
-      <div className="flex flex-col gap-1">
-        <label htmlFor="ticker" className="text-sm font-medium">
-          Ticker
-        </label>
-        <input
-          id="ticker"
-          value={ticker}
-          onChange={(e) => setTicker(e.target.value.toUpperCase())}
-          className={`${inputClass} font-mono uppercase`}
         />
       </div>
       <div className="flex flex-col gap-1">
