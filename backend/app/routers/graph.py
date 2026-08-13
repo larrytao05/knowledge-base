@@ -46,7 +46,6 @@ def get_graph(db: Session = Depends(synced_db)) -> schemas.GraphData:
             schemas.GraphNode(
                 id=n.id,
                 title=n.title,
-                ticker=n.ticker,
                 verdict=latest_verdict_by_node.get(n.id),  # type: ignore[arg-type]
                 degree=degree[n.id],
             )

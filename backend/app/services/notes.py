@@ -43,15 +43,12 @@ def create_node(
     *,
     title: str,
     body: str,
-    ticker: str | None,
     tags: list[str],
 ) -> Node:
     node_id = _new_id()
     path = allocate_path(vault.root, slugify(title))
 
     frontmatter: dict[str, object] = {"id": node_id, "title": title}
-    if ticker:
-        frontmatter["ticker"] = ticker
     if tags:
         frontmatter["tags"] = tags
     frontmatter["created"] = _iso_now()
@@ -80,11 +77,6 @@ def update_node(db: Session, vault: Vault, node: Node, payload: NodeUpdate) -> N
         frontmatter = dict(current.frontmatter)
         if "title" in provided and payload.title is not None:
             frontmatter["title"] = payload.title
-        if "ticker" in provided:
-            if payload.ticker:
-                frontmatter["ticker"] = payload.ticker
-            else:
-                frontmatter.pop("ticker", None)
         if "tags" in provided:
             if payload.tags:
                 frontmatter["tags"] = payload.tags
