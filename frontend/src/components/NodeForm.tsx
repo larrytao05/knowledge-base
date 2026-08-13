@@ -5,6 +5,7 @@ import { useState } from "react";
 import { ApiError, createNode } from "@/lib/api";
 import { Card } from "./Card";
 import { Spinner } from "./Spinner";
+import { WikilinkTextarea } from "./WikilinkTextarea";
 
 const inputClass =
   "rounded border border-border-default bg-background px-3 py-2 text-sm text-foreground " +
@@ -60,10 +61,10 @@ export function NodeForm() {
           <label htmlFor="body" className="text-sm font-medium">
             Body
           </label>
-          <textarea
+          <WikilinkTextarea
             id="body"
             value={body}
-            onChange={(e) => setBody(e.target.value)}
+            onChange={setBody}
             placeholder="Write your note... use [[wikilinks]] to link other nodes"
             rows={4}
             className={inputClass}

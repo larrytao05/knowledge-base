@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Card } from "@/components/Card";
 import { Spinner } from "@/components/Spinner";
+import { WikilinkTextarea } from "@/components/WikilinkTextarea";
 import { ApiError, updateNode } from "@/lib/api";
 import type { NodeDetail } from "@/types";
 
@@ -23,6 +24,17 @@ function parseTags(text: string): string[] {
     .filter((t) => t.length > 0);
 }
 
+/** Both the stale-content conflict and a rename collision come back as 409, but
+ * only the former carries an object detail with the note to reload from. */
+function staleContentDetail(
+  err: unknown,
+): { message?: string; current?: NodeDetail | null } | null {
+  if (!(err instanceof ApiError) || err.status !== 409) return null;
+  const detail = (err.body as { detail?: unknown } | null)?.detail;
+  if (!detail || typeof detail !== "object") return null;
+  return detail as { message?: string; current?: NodeDetail | null };
+}
+
 export function NodeEditor({ node }: { node: NodeDetail }) {
   const router = useRouter();
   const [title, setTitle] = useState(node.title);
@@ -32,6 +44,7 @@ export function NodeEditor({ node }: { node: NodeDetail }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [conflict, setConflict] = useState<ConflictState | null>(null);
+  const [skipped, setSkipped] = useState(0);
 
   if (node.fm_error) {
     return (
@@ -44,6 +57,16 @@ export function NodeEditor({ node }: { node: NodeDetail }) {
     );
   }
 
+  // A save can rewrite the body server-side (renaming retargets this note's own
+  // wikilinks), so the form has to take the saved note back or the next save
+  // would push the pre-rename body up under a hash the server just accepted.
+  function adopt(saved: NodeDetail) {
+    setTitle(saved.title);
+    setTagsText(saved.tags.join(", "));
+    setBody(saved.body);
+    setContentHash(saved.content_hash);
+  }
+
   async function performSave(hash: string) {
     setSaving(true);
     setError(null);
@@ -54,15 +77,16 @@ export function NodeEditor({ node }: { node: NodeDetail }) {
         body,
         tags: parseTags(tagsText),
       });
-      setContentHash(updated.content_hash);
+      adopt(updated);
       setConflict(null);
+      setSkipped(updated.link_rewrite_skipped);
       router.refresh();
     } catch (err) {
-      if (err instanceof ApiError && err.status === 409) {
-        const body = err.body as { detail?: { message?: string; current?: NodeDetail | null } };
+      const detail = staleContentDetail(err);
+      if (detail) {
         setConflict({
-          message: body?.detail?.message ?? "This note changed on disk",
-          current: body?.detail?.current ?? null,
+          message: detail.message ?? "This note changed on disk",
+          current: detail.current ?? null,
         });
       } else {
         setError(err instanceof Error ? err.message : "Failed to save");
@@ -74,12 +98,9 @@ export function NodeEditor({ node }: { node: NodeDetail }) {
 
   function handleReload() {
     if (!conflict?.current) return;
-    const current = conflict.current;
-    setTitle(current.title);
-    setTagsText(current.tags.join(", "));
-    setBody(current.body);
-    setContentHash(current.content_hash);
+    adopt(conflict.current);
     setConflict(null);
+    setSkipped(0);
   }
 
   function handleOverwrite() {
@@ -116,10 +137,10 @@ export function NodeEditor({ node }: { node: NodeDetail }) {
         <label htmlFor="body" className="text-sm font-medium">
           Body
         </label>
-        <textarea
+        <WikilinkTextarea
           id="body"
           value={body}
-          onChange={(e) => setBody(e.target.value)}
+          onChange={setBody}
           rows={12}
           className={`${inputClass} font-mono`}
         />
@@ -148,6 +169,13 @@ export function NodeEditor({ node }: { node: NodeDetail }) {
             </button>
           </div>
         </div>
+      )}
+
+      {skipped > 0 && (
+        <p className="text-sm text-amber-400">
+          Renamed, but {skipped} {skipped === 1 ? "note" : "notes"} linking here could not be
+          updated - their links still point at the old title.
+        </p>
       )}
 
       {error && <p className="text-sm text-red-400">{error}</p>}
