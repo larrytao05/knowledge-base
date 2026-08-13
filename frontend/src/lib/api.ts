@@ -5,6 +5,7 @@ import type {
   NodeSummary,
   SyncReport,
 } from "../types";
+import { normalizeTitle } from "./wikilinks";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
@@ -18,6 +19,22 @@ export class ApiError extends Error {
     this.status = status;
     this.body = body;
   }
+}
+
+/** The server's own wording for a rejection, so reasons like an unlinkable title
+ * or a rename collision reach the user instead of a bare status line. Object
+ * details (the stale-content conflict) are left to their own handling. */
+function errorMessage(body: unknown, fallback: string): string {
+  const detail = (body as { detail?: unknown } | null)?.detail;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    const reasons = detail
+      .map((d) => (d as { msg?: unknown }).msg)
+      .filter((m): m is string => typeof m === "string")
+      .map((m) => m.replace(/^Value error, /, ""));
+    if (reasons.length > 0) return reasons.join("; ");
+  }
+  return fallback;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -34,7 +51,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       // not JSON - keep the raw text
     }
-    throw new ApiError(res.status, body, `${res.status} ${res.statusText}`);
+    throw new ApiError(res.status, body, errorMessage(body, `${res.status} ${res.statusText}`));
   }
   return res.json() as Promise<T>;
 }
@@ -69,6 +86,19 @@ export function updateNode(
   },
 ): Promise<NodeDetail> {
   return request(`/api/nodes/${id}`, { method: "PATCH", body: JSON.stringify(input) });
+}
+
+/** Resolve a wikilink target to a node id, creating the note if it doesn't exist
+ * yet. Searching first keeps a note someone else created in the meantime from
+ * being duplicated. */
+export async function openOrCreateNode(title: string): Promise<string> {
+  const norm = normalizeTitle(title);
+  const matches = await listNodes({ q: norm });
+  const existing = matches.find((n) => normalizeTitle(n.title) === norm);
+  if (existing) return existing.id;
+
+  const created = await createNode({ title });
+  return created.id;
 }
 
 export function runNodeCheck(id: string): Promise<CheckRead> {

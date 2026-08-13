@@ -6,6 +6,7 @@ import { CheckCard } from "@/components/CheckCard";
 import { NodeBody } from "@/components/NodeBody";
 import { NodeEditor } from "@/components/NodeEditor";
 import { RunCheckButton } from "@/components/RunCheckButton";
+import { UnresolvedLink } from "@/components/UnresolvedLink";
 import { ApiError, getNode } from "@/lib/api";
 import { formatRelativeTime } from "@/lib/format";
 import type { LinkRef } from "@/types";
@@ -38,9 +39,11 @@ function LinkList({ links, emptyLabel }: { links: LinkRef[]; emptyLabel: string 
               {l.title ?? l.target_raw}
             </Link>
           ) : (
-            <span className="text-sm text-muted underline decoration-dotted">
-              {l.alias ?? l.target_raw}
-            </span>
+            <UnresolvedLink
+              target={l.target_raw}
+              label={l.alias ?? l.target_raw}
+              className="text-sm"
+            />
           )}
         </li>
       ))}

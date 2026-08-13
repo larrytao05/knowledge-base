@@ -3,6 +3,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.services.wikilinks import UNLINKABLE_TITLE_REASON, is_linkable_title
+
 Verdict = Literal["on_track", "diverging", "unclear"]
 
 
@@ -20,8 +22,8 @@ class NodeCreate(BaseModel):
     @classmethod
     def strip_title(cls, v: str) -> str:
         stripped = v.strip()
-        if not stripped:
-            raise ValueError("title must not be blank")
+        if not is_linkable_title(stripped):
+            raise ValueError(f"title {UNLINKABLE_TITLE_REASON}")
         return stripped
 
     @field_validator("tags")
@@ -45,6 +47,14 @@ class NodeUpdate(BaseModel):
     title: str | None = None
     body: str | None = None
     tags: list[str] | None = None
+
+    # No linkability check here: notes are co-edited with Obsidian, so a title
+    # already on disk may hold anything, and the frontend echoes it back on every
+    # save. Only an actual rename is held to it, in notes.update_node.
+    @field_validator("title")
+    @classmethod
+    def strip_title(cls, v: str | None) -> str | None:
+        return v.strip() if v is not None else None
 
     @field_validator("tags")
     @classmethod
@@ -107,6 +117,10 @@ class NodeDetail(BaseModel):
     links_out: list[LinkRef]
     backlinks: list[LinkRef]
     checks: list[CheckRead]
+    # How many other notes a rename could not retarget (see notes.update_node).
+    # Always 0 outside a PATCH response.
+    link_rewrite_skipped: int = 0
+    links_left_at_old_title: int = 0
 
 
 class GraphNode(BaseModel):

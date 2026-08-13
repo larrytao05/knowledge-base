@@ -11,6 +11,7 @@ from app.models import Check, Node, NodeLink
 from app.services import notes
 from app.services.agent import AgentCheckError, run_check
 from app.services.indexer import sync_vault
+from app.services.wikilinks import UNLINKABLE_TITLE_REASON
 
 router = APIRouter(prefix="/api/nodes", tags=["nodes"])
 
@@ -33,7 +34,13 @@ def _latest_verdict(db: Session, node_id: str) -> schemas.Verdict | None:
     return check.verdict if check else None  # type: ignore[return-value]
 
 
-def _build_detail(db: Session, node: Node) -> schemas.NodeDetail:
+def _build_detail(
+    db: Session,
+    node: Node,
+    *,
+    link_rewrite_skipped: int = 0,
+    links_left_at_old_title: int = 0,
+) -> schemas.NodeDetail:
     links_out: list[schemas.LinkRef] = []
     for link in db.scalars(select(NodeLink).where(NodeLink.source_id == node.id)):
         target = db.scalars(
@@ -84,6 +91,8 @@ def _build_detail(db: Session, node: Node) -> schemas.NodeDetail:
         links_out=links_out,
         backlinks=backlinks,
         checks=checks,
+        link_rewrite_skipped=link_rewrite_skipped,
+        links_left_at_old_title=links_left_at_old_title,
     )
 
 
@@ -153,9 +162,19 @@ def update_node(
         raise HTTPException(404, "Node not found")
 
     try:
-        updated = notes.update_node(db, vault, node, payload)
+        updated, skipped, left_alone = notes.update_node(db, vault, node, payload)
     except notes.MalformedNoteError as exc:
         raise HTTPException(422, f"cannot edit a note with invalid frontmatter: {exc}") from exc
+    except notes.UnlinkableTitleError as exc:
+        raise HTTPException(
+            422, f"cannot rename to {str(exc)!r}: a title {UNLINKABLE_TITLE_REASON}"
+        ) from exc
+    except notes.TitleConflictError as exc:
+        raise HTTPException(
+            409,
+            f"another note is already titled {str(exc)!r}: renaming onto it would "
+            "retarget every link to this note at that one",
+        ) from exc
     except notes.StaleContentError:
         sync_vault(db, vault.root)
         current = db.get(Node, node_id)
@@ -170,7 +189,9 @@ def update_node(
     except OSError as exc:
         raise HTTPException(503, f"failed to write vault file: {exc}") from exc
 
-    return _build_detail(db, updated)
+    return _build_detail(
+        db, updated, link_rewrite_skipped=skipped, links_left_at_old_title=left_alone
+    )
 
 
 @router.post("/{node_id}/checks", response_model=schemas.CheckRead, status_code=201)
