@@ -14,7 +14,6 @@ class Source(BaseModel):
 class NodeCreate(BaseModel):
     title: str = Field(min_length=1, max_length=300)
     body: str = Field(default="", max_length=100_000)
-    ticker: str | None = Field(default=None, max_length=16)
     tags: list[str] = Field(default_factory=list, max_length=32)
 
     @field_validator("title")
@@ -24,14 +23,6 @@ class NodeCreate(BaseModel):
         if not stripped:
             raise ValueError("title must not be blank")
         return stripped
-
-    @field_validator("ticker")
-    @classmethod
-    def normalize_ticker(cls, v: str | None) -> str | None:
-        if v is None:
-            return None
-        stripped = v.strip().upper()
-        return stripped or None
 
     @field_validator("tags")
     @classmethod
@@ -46,23 +37,14 @@ class NodeCreate(BaseModel):
 
 class NodeUpdate(BaseModel):
     """PATCH always applies every field the client includes in the request
-    body (checked via model_fields_set) - the frontend always sends all four
+    body (checked via model_fields_set) - the frontend always sends all three
     optional fields so "unset" (leave alone) and "null" (clear) never need to
     be distinguished in practice."""
 
     content_hash: str = Field(min_length=64, max_length=64)
     title: str | None = None
     body: str | None = None
-    ticker: str | None = None
     tags: list[str] | None = None
-
-    @field_validator("ticker")
-    @classmethod
-    def normalize_ticker(cls, v: str | None) -> str | None:
-        if v is None:
-            return None
-        stripped = v.strip().upper()
-        return stripped or None
 
     @field_validator("tags")
     @classmethod
@@ -80,7 +62,7 @@ class NodeUpdate(BaseModel):
     def require_a_change(self) -> "NodeUpdate":
         fields = self.model_fields_set - {"content_hash"}
         if not fields:
-            raise ValueError("at least one of title, body, ticker, tags must be provided")
+            raise ValueError("at least one of title, body, tags must be provided")
         return self
 
 
@@ -95,7 +77,6 @@ class NodeSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: str
     title: str
-    ticker: str | None
     tags: list[str]
     excerpt: str
     updated_at: datetime
@@ -117,7 +98,6 @@ class NodeDetail(BaseModel):
     id: str
     title: str
     path: str
-    ticker: str | None
     tags: list[str]
     body: str
     content_hash: str
@@ -132,7 +112,6 @@ class NodeDetail(BaseModel):
 class GraphNode(BaseModel):
     id: str
     title: str
-    ticker: str | None
     verdict: Verdict | None
     degree: int
 

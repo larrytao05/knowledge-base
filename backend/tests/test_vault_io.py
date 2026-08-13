@@ -117,12 +117,12 @@ def test_content_hash_always_set() -> None:
 
 @pytest.mark.parametrize("value", ["NO", "123", "true", "2026-08-09", "yes", "null"])
 def test_serialize_note_round_trip_preserves_ambiguous_strings(value: str) -> None:
-    fm = {"ticker": value, "tags": ["a", "b"]}
+    fm = {"label": value, "tags": ["a", "b"]}
     serialized = serialize_note(fm, "Body content.")
     parsed = parse_note(serialized)
     assert parsed.error is None
-    assert parsed.frontmatter["ticker"] == value
-    assert isinstance(parsed.frontmatter["ticker"], str)
+    assert parsed.frontmatter["label"] == value
+    assert isinstance(parsed.frontmatter["label"], str)
 
 
 def test_serialize_note_normal_strings_not_quoted() -> None:

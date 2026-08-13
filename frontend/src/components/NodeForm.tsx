@@ -14,7 +14,6 @@ export function NodeForm() {
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
-  const [ticker, setTicker] = useState("");
   const [tags, setTags] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -27,7 +26,6 @@ export function NodeForm() {
       const result = await createNode({
         title,
         body: body || undefined,
-        ticker: ticker || undefined,
         tags: tags
           ? tags
               .split(",")
@@ -69,19 +67,6 @@ export function NodeForm() {
             placeholder="Write your note... use [[wikilinks]] to link other nodes"
             rows={4}
             className={inputClass}
-          />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="ticker" className="text-sm font-medium">
-            Ticker
-          </label>
-          <input
-            id="ticker"
-            value={ticker}
-            onChange={(e) => setTicker(e.target.value.toUpperCase())}
-            placeholder="NVDA (optional)"
-            maxLength={10}
-            className={`${inputClass} font-mono uppercase`}
           />
         </div>
         <div className="flex flex-col gap-1">

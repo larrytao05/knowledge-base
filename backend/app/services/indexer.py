@@ -36,14 +36,6 @@ def _new_id() -> str:
     return secrets.token_hex(6)
 
 
-def _coerce_ticker(value: Any) -> str | None:
-    if value is None:
-        return None
-    if isinstance(value, str):
-        return value.strip() or None
-    return str(value)
-
-
 def _coerce_tags(value: Any) -> list[str]:
     if isinstance(value, list):
         return [str(t) for t in value if isinstance(t, str | int | float)]
@@ -121,7 +113,6 @@ def _index_note_file(
     mtime_ns, size = file_signature(path)
 
     title = _title_from_frontmatter(parsed) or path.stem
-    ticker = _coerce_ticker(parsed.frontmatter.get("ticker")) if parsed.error is None else None
     tags = _coerce_tags(parsed.frontmatter.get("tags")) if parsed.error is None else []
     created_raw = parsed.frontmatter.get("created") if parsed.error is None else None
 
@@ -132,7 +123,6 @@ def _index_note_file(
     node.title = title
     node.title_norm = normalize_title(title)
     node.kind = kind
-    node.ticker = ticker
     node.tags = tags
     node.body = parsed.body
     node.content_hash = parsed.content_hash

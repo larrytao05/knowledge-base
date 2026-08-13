@@ -75,7 +75,6 @@ def _build_detail(db: Session, node: Node) -> schemas.NodeDetail:
         id=node.id,
         title=node.title,
         path=node.path,
-        ticker=node.ticker,
         tags=node.tags,
         body=node.body,
         content_hash=node.content_hash,
@@ -106,7 +105,6 @@ def list_nodes(
         schemas.NodeSummary(
             id=n.id,
             title=n.title,
-            ticker=n.ticker,
             tags=n.tags,
             excerpt=_excerpt(n.body),
             updated_at=n.updated_at,
@@ -128,7 +126,6 @@ def create_node(
             vault,
             title=payload.title,
             body=payload.body,
-            ticker=payload.ticker,
             tags=payload.tags,
         )
     except OSError as exc:
@@ -187,7 +184,7 @@ def run_node_check(
         raise HTTPException(404, "Node not found")
 
     try:
-        result = run_check(claim=f"{node.title}\n\n{node.body}", context=node.ticker or "")
+        result = run_check(claim=f"{node.title}\n\n{node.body}")
     except AgentCheckError as exc:
         raise HTTPException(502, f"Check failed: {exc}") from exc
 

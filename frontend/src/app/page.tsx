@@ -44,9 +44,6 @@ export default async function Home(props: PageProps<"/">) {
               <div className="flex items-start justify-between gap-4">
                 <div className="flex flex-col gap-1">
                   <div className="font-medium">{node.title}</div>
-                  {node.ticker && (
-                    <div className="font-mono font-medium text-accent">{node.ticker}</div>
-                  )}
                 </div>
                 {node.latest_verdict && <VerdictBadge verdict={node.latest_verdict} />}
               </div>

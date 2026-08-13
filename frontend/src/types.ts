@@ -15,7 +15,6 @@ export interface LinkRef {
 export interface NodeSummary {
   id: string;
   title: string;
-  ticker: string | null;
   tags: string[];
   excerpt: string;
   updated_at: string;
@@ -35,7 +34,6 @@ export interface NodeDetail {
   id: string;
   title: string;
   path: string;
-  ticker: string | null;
   tags: string[];
   body: string;
   content_hash: string;
@@ -50,7 +48,6 @@ export interface NodeDetail {
 export interface GraphNode {
   id: string;
   title: string;
-  ticker: string | null;
   verdict: Verdict | null;
   degree: number;
 }

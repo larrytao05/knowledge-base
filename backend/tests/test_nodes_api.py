@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 
 def _create(client: TestClient, **overrides: object) -> dict:
-    payload = {"title": "NVDA Thesis", "body": "AI capex continues.", "ticker": "nvda"}
+    payload = {"title": "Sample Note", "body": "Some notes about a topic."}
     payload.update(overrides)
     response = client.post("/api/nodes", json=payload)
     assert response.status_code == 201
@@ -19,8 +19,7 @@ def test_create_writes_file_with_matching_id(client: TestClient, vault_root: Pat
     assert len(files) == 1
     text = files[0].read_text()
     assert f"id: {node['id']}" in text
-    assert "title: NVDA Thesis" in text
-    assert node["ticker"] == "NVDA"
+    assert "title: Sample Note" in text
 
 
 def test_create_sanitizes_traversal_title(client: TestClient, vault_root: Path) -> None:
@@ -117,8 +116,8 @@ def test_get_unknown_node_404(client: TestClient) -> None:
 
 
 def test_links_out_and_backlinks_resolve_across_nodes(client: TestClient) -> None:
-    target = _create(client, title="Target Note", ticker=None)
-    source = _create(client, title="Source Note", body="See [[Target Note]].", ticker=None)
+    target = _create(client, title="Target Note")
+    source = _create(client, title="Source Note", body="See [[Target Note]].")
 
     source_detail = client.get(f"/api/nodes/{source['id']}").json()
     assert source_detail["links_out"][0]["node_id"] == target["id"]

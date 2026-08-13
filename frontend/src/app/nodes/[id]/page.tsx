@@ -69,18 +69,9 @@ export default async function NodeDetailPage({ params }: Props) {
 
       <div className="flex flex-col gap-2">
         <div className="flex items-center gap-3">
-          <h1
-            className={`font-mono text-2xl font-semibold ${
-              node.ticker ? "text-accent" : "text-foreground"
-            }`}
-          >
+          <h1 className="font-mono text-2xl font-semibold text-foreground">
             {node.title}
           </h1>
-          {node.ticker && (
-            <span className="rounded border border-border-default px-2 py-0.5 font-mono text-xs text-muted">
-              {node.ticker}
-            </span>
-          )}
         </div>
         {node.tags.length > 0 && (
           <div className="flex flex-wrap gap-2">

@@ -9,7 +9,7 @@ from app.services.vault_io import parse_note
 
 def _create_node(client: TestClient) -> dict:
     response = client.post(
-        "/api/nodes", json={"title": "NVDA Thesis", "body": "AI capex continues.", "ticker": "NVDA"}
+        "/api/nodes", json={"title": "Sample Note", "body": "Some notes about a topic."}
     )
     assert response.status_code == 201
     return response.json()
@@ -83,7 +83,7 @@ def test_check_note_wikilink_does_not_create_spurious_backlink(
 
     files = list((vault_root / "checks").glob("*.md"))
     assert len(files) == 1
-    assert "[[NVDA Thesis]]" in files[0].read_text()
+    assert "[[Sample Note]]" in files[0].read_text()
 
     detail = client.get(f"/api/nodes/{node['id']}").json()
     assert detail["backlinks"] == []

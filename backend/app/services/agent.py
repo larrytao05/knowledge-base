@@ -23,8 +23,8 @@ class CheckResult:
 
 SYSTEM_PROMPT = (
     "You are a fact-checking research assistant helping someone keep their "
-    "notes honest. You'll be given a claim someone wrote down, optional "
-    "context, and recent web search results. Your ONLY job is to check the "
+    "notes honest. You'll be given a claim someone wrote down, and recent "
+    "web search results. Your ONLY job is to check the "
     "claim against the evidence and output a verdict. Do NOT write your own "
     "essay or notes on the topic. Do NOT use markdown headers, bullet points, "
     "or bold text anywhere.\n\n"
@@ -101,11 +101,9 @@ def _request(client: OpenAI, messages: list[dict[str, str]], *, strict: bool) ->
     )
 
 
-def run_check(*, claim: str, context: str = "") -> CheckResult:
+def run_check(*, claim: str) -> CheckResult:
     client = OpenAI(base_url=OPENROUTER_BASE_URL, api_key=settings.openrouter_api_key)
     user_content = f"Claim:\n{claim}"
-    if context:
-        user_content += f"\n\nContext: {context}"
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": user_content},
