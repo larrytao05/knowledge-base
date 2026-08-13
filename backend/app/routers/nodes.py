@@ -184,7 +184,7 @@ def run_node_check(
         raise HTTPException(404, "Node not found")
 
     try:
-        result = run_check(claim=f"{node.title}\n\n{node.body}", context=node.ticker or "")
+        result = run_check(claim=f"{node.title}\n\n{node.body}")
     except AgentCheckError as exc:
         raise HTTPException(502, f"Check failed: {exc}") from exc
 
