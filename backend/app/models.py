@@ -15,7 +15,6 @@ class Node(Base):
     title: Mapped[str] = mapped_column(String(300))
     title_norm: Mapped[str] = mapped_column(String(300), index=True)
     kind: Mapped[str] = mapped_column(String(20), default="note")
-    ticker: Mapped[str | None] = mapped_column(String(16), index=True, default=None)
     tags: Mapped[list[str]] = mapped_column(JSON, default=list)
     body: Mapped[str] = mapped_column(Text)
     content_hash: Mapped[str] = mapped_column(String(64))
