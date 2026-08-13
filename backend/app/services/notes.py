@@ -94,6 +94,12 @@ def _inbound_link_sources(old_norm: str, *, skip_id: str) -> Select[tuple[Node]]
     )
 
 
+def _malformed_note_sources(skip_id: str) -> Select[tuple[Node]]:
+    return select(Node).where(
+        Node.kind == "note", Node.fm_error.is_not(None), Node.id != skip_id
+    )
+
+
 def _rewrite_inbound_links(
     db: Session, vault: Vault, *, old_norm: str, new_title: str, skip_id: str
 ) -> int:
@@ -109,7 +115,18 @@ def _rewrite_inbound_links(
     backup_dir = vault.root / ".vault-backups"
     skipped = 0
 
-    for other in db.scalars(_inbound_link_sources(old_norm, skip_id=skip_id)):
+    indexed = list(db.scalars(_inbound_link_sources(old_norm, skip_id=skip_id)))
+    # A note whose frontmatter failed to parse has no link rows for the index to
+    # nominate, but its body can still hold the link, and rewriting works off the
+    # raw text so the broken frontmatter is carried through untouched.
+    seen = {other.id for other in indexed}
+    malformed = [
+        other
+        for other in db.scalars(_malformed_note_sources(skip_id=skip_id))
+        if other.id not in seen
+    ]
+
+    for other, from_index in [(o, True) for o in indexed] + [(o, False) for o in malformed]:
         path = safe_join(vault.root, *Path(other.path).parts)
         try:
             with path_lock(path):
@@ -118,9 +135,13 @@ def _rewrite_inbound_links(
                 if rewritten == text:
                     # The index says this file links here, so finding nothing to
                     # rewrite means the two disagree about the target - report it
-                    # rather than let a dangling link pass as a clean rename.
-                    skipped += 1
-                    logger.warning("no link to retarget in %s despite an index entry", other.path)
+                    # rather than let a dangling link pass as a clean rename. A
+                    # malformed note was only a guess, so a miss there is normal.
+                    if from_index:
+                        skipped += 1
+                        logger.warning(
+                            "no link to retarget in %s despite an index entry", other.path
+                        )
                     continue
                 atomic_write(path, rewritten, backup_dir=backup_dir)
         except OSError as exc:
@@ -130,8 +151,11 @@ def _rewrite_inbound_links(
     return skipped
 
 
-def update_node(db: Session, vault: Vault, node: Node, payload: NodeUpdate) -> tuple[Node, int]:
-    """Returns the reindexed note and how many inbound-link rewrites were skipped."""
+def update_node(
+    db: Session, vault: Vault, node: Node, payload: NodeUpdate
+) -> tuple[Node, int, int]:
+    """Returns the reindexed note, how many inbound-link rewrites failed, and how
+    many were deliberately left pointing at the old title."""
     if node.fm_error is not None:
         raise MalformedNoteError(node.fm_error)
 
@@ -173,12 +197,14 @@ def update_node(db: Session, vault: Vault, node: Node, payload: NodeUpdate) -> t
         atomic_write(path, serialize_note(frontmatter, body), backup_dir=backup_dir)
 
     skipped = 0
+    left_alone = 0
     if renamed and _title_taken(db, old_norm, node.id):
         # Another note still holds the old title, so an inbound `[[old title]]`
         # may well have meant that one - retargeting it here would silently point
         # it somewhere it never referred to. Leave them all alone: the old title
-        # is now unambiguous, so they resolve to the note that kept it.
-        skipped = len(list(db.scalars(_inbound_link_sources(old_norm, skip_id=node.id))))
+        # is now unambiguous, so they resolve to the note that kept it. Nothing
+        # failed here, so this is counted apart from the rewrites that did.
+        left_alone = len(list(db.scalars(_inbound_link_sources(old_norm, skip_id=node.id))))
     elif renamed:
         skipped = _rewrite_inbound_links(
             db, vault, old_norm=old_norm, new_title=new_title, skip_id=node.id
@@ -189,7 +215,7 @@ def update_node(db: Session, vault: Vault, node: Node, payload: NodeUpdate) -> t
     updated = db.get(Node, node.id)
     if updated is None:
         raise RuntimeError(f"node {node.id} missing from index immediately after sync")
-    return updated, skipped
+    return updated, skipped, left_alone
 
 
 def write_check_note(db: Session, vault: Vault, node: Node, result: CheckResult) -> Check:

@@ -190,10 +190,33 @@ def test_rename_away_from_a_shared_title_leaves_inbound_links_alone(
     # The link may well have meant the note that kept the title, so retargeting
     # it at the renamed one would repoint it at a note it never referenced.
     assert response.status_code == 200
-    assert response.json()["link_rewrite_skipped"] == 1
+    assert response.json()["links_left_at_old_title"] == 1
+    assert response.json()["link_rewrite_skipped"] == 0
     assert "See [[Meeting Notes]]." in (vault_root / source["path"]).read_text()
     source_detail = client.get(f"/api/nodes/{source['id']}").json()
     assert source_detail["links_out"][0]["node_id"] == kept["id"]
+
+
+def test_rename_rewrites_links_in_a_note_with_malformed_frontmatter(
+    client: TestClient, vault_root: Path
+) -> None:
+    target = _create(client, title="Old Title")
+    # No link rows exist for a note the indexer couldn't parse, so the index
+    # can't nominate it - its body still has to be retargeted.
+    broken = vault_root / "broken.md"
+    broken.write_text("---\ntitle: [unclosed\n---\n\nSee [[Old Title]].\n", encoding="utf-8")
+    time.sleep(0.35)
+
+    response = client.patch(
+        f"/api/nodes/{target['id']}",
+        json={"content_hash": target["content_hash"], "title": "New Title"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["link_rewrite_skipped"] == 0
+    text = broken.read_text()
+    assert "See [[New Title]]." in text
+    assert "title: [unclosed" in text
 
 
 def test_rename_rewrites_a_target_holding_inline_code(

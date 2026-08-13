@@ -44,6 +44,7 @@ export interface NodeDetail {
   backlinks: LinkRef[];
   checks: CheckRead[];
   link_rewrite_skipped: number;
+  links_left_at_old_title: number;
 }
 
 export interface GraphNode {

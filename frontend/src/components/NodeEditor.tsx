@@ -45,6 +45,7 @@ export function NodeEditor({ node }: { node: NodeDetail }) {
   const [error, setError] = useState<string | null>(null);
   const [conflict, setConflict] = useState<ConflictState | null>(null);
   const [skipped, setSkipped] = useState(0);
+  const [leftAlone, setLeftAlone] = useState(0);
 
   if (node.fm_error) {
     return (
@@ -80,6 +81,7 @@ export function NodeEditor({ node }: { node: NodeDetail }) {
       adopt(updated);
       setConflict(null);
       setSkipped(updated.link_rewrite_skipped);
+      setLeftAlone(updated.links_left_at_old_title);
       router.refresh();
     } catch (err) {
       const detail = staleContentDetail(err);
@@ -101,6 +103,7 @@ export function NodeEditor({ node }: { node: NodeDetail }) {
     adopt(conflict.current);
     setConflict(null);
     setSkipped(0);
+    setLeftAlone(0);
   }
 
   function handleOverwrite() {
@@ -118,6 +121,7 @@ export function NodeEditor({ node }: { node: NodeDetail }) {
           id="title"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
+          disabled={saving}
           className={inputClass}
         />
       </div>
@@ -130,6 +134,7 @@ export function NodeEditor({ node }: { node: NodeDetail }) {
           value={tagsText}
           onChange={(e) => setTagsText(e.target.value)}
           placeholder="tag-one, tag-two"
+          disabled={saving}
           className={inputClass}
         />
       </div>
@@ -142,6 +147,7 @@ export function NodeEditor({ node }: { node: NodeDetail }) {
           value={body}
           onChange={setBody}
           rows={12}
+          disabled={saving}
           className={`${inputClass} font-mono`}
         />
       </div>
@@ -175,6 +181,13 @@ export function NodeEditor({ node }: { node: NodeDetail }) {
         <p className="text-sm text-amber-400">
           Renamed, but {skipped} {skipped === 1 ? "note" : "notes"} linking here could not be
           updated - their links still point at the old title.
+        </p>
+      )}
+
+      {leftAlone > 0 && (
+        <p className="text-sm text-muted">
+          {leftAlone} {leftAlone === 1 ? "note still links" : "notes still link"} to the old title,
+          left alone because another note still goes by it.
         </p>
       )}
 

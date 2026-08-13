@@ -34,7 +34,13 @@ def _latest_verdict(db: Session, node_id: str) -> schemas.Verdict | None:
     return check.verdict if check else None  # type: ignore[return-value]
 
 
-def _build_detail(db: Session, node: Node, *, link_rewrite_skipped: int = 0) -> schemas.NodeDetail:
+def _build_detail(
+    db: Session,
+    node: Node,
+    *,
+    link_rewrite_skipped: int = 0,
+    links_left_at_old_title: int = 0,
+) -> schemas.NodeDetail:
     links_out: list[schemas.LinkRef] = []
     for link in db.scalars(select(NodeLink).where(NodeLink.source_id == node.id)):
         target = db.scalars(
@@ -86,6 +92,7 @@ def _build_detail(db: Session, node: Node, *, link_rewrite_skipped: int = 0) -> 
         backlinks=backlinks,
         checks=checks,
         link_rewrite_skipped=link_rewrite_skipped,
+        links_left_at_old_title=links_left_at_old_title,
     )
 
 
@@ -155,7 +162,7 @@ def update_node(
         raise HTTPException(404, "Node not found")
 
     try:
-        updated, skipped = notes.update_node(db, vault, node, payload)
+        updated, skipped, left_alone = notes.update_node(db, vault, node, payload)
     except notes.MalformedNoteError as exc:
         raise HTTPException(422, f"cannot edit a note with invalid frontmatter: {exc}") from exc
     except notes.UnlinkableTitleError as exc:
@@ -182,7 +189,9 @@ def update_node(
     except OSError as exc:
         raise HTTPException(503, f"failed to write vault file: {exc}") from exc
 
-    return _build_detail(db, updated, link_rewrite_skipped=skipped)
+    return _build_detail(
+        db, updated, link_rewrite_skipped=skipped, links_left_at_old_title=left_alone
+    )
 
 
 @router.post("/{node_id}/checks", response_model=schemas.CheckRead, status_code=201)

@@ -120,6 +120,7 @@ class NodeDetail(BaseModel):
     # How many other notes a rename could not retarget (see notes.update_node).
     # Always 0 outside a PATCH response.
     link_rewrite_skipped: int = 0
+    links_left_at_old_title: int = 0
 
 
 class GraphNode(BaseModel):

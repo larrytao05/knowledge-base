@@ -27,6 +27,7 @@ function detail(overrides: Partial<NodeDetail> = {}): NodeDetail {
     backlinks: [],
     checks: [],
     link_rewrite_skipped: 0,
+    links_left_at_old_title: 0,
     ...overrides,
   };
 }
@@ -63,6 +64,28 @@ describe("NodeEditor", () => {
       title: "New Title",
       body: "This note is [[New Title]].",
     });
+  });
+
+  // Adopting the saved note is what stops a rename's self-link rewrite being
+  // reverted, but it also overwrites the form - so nothing may be typed into it
+  // while the save is in flight.
+  it("locks the fields while a save is in flight", async () => {
+    let settle: ((saved: NodeDetail) => void) | null = null;
+    mockUpdate.mockReturnValue(
+      new Promise<NodeDetail>((resolve) => {
+        settle = resolve;
+      }),
+    );
+
+    render(<NodeEditor node={detail()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(screen.getByLabelText("Title")).toBeDisabled());
+    expect(screen.getByLabelText("Tags")).toBeDisabled();
+    expect(screen.getByLabelText("Body")).toBeDisabled();
+
+    settle!(detail({ content_hash: "b".repeat(64) }));
+    await waitFor(() => expect(screen.getByLabelText("Title")).toBeEnabled());
   });
 
   it("shows the reason a rename was refused instead of the reload prompt", async () => {

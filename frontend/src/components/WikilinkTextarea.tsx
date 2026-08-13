@@ -20,6 +20,7 @@ interface Props {
   rows: number;
   className: string;
   placeholder?: string;
+  disabled?: boolean;
 }
 
 // Re-filtering the last search locally keeps the list from blanking out between
@@ -34,7 +35,15 @@ function matchingOptions(nodes: NodeSummary[], queryText: string | null): NodeSu
     .slice(0, MAX_OPTIONS);
 }
 
-export function WikilinkTextarea({ id, value, onChange, rows, className, placeholder }: Props) {
+export function WikilinkTextarea({
+  id,
+  value,
+  onChange,
+  rows,
+  className,
+  placeholder,
+  disabled,
+}: Props) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const pendingCaret = useRef<number | null>(null);
   const [query, setQuery] = useState<WikilinkQuery | null>(null);
@@ -137,6 +146,7 @@ export function WikilinkTextarea({ id, value, onChange, rows, className, placeho
         onBlur={() => setQuery(null)}
         rows={rows}
         placeholder={placeholder}
+        disabled={disabled}
         className={`w-full ${className}`}
       />
       {open && (
